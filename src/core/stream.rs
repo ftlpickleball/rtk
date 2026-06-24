@@ -419,6 +419,47 @@ pub fn status_to_exit_code(status: std::process::ExitStatus) -> i32 {
     1
 }
 
+/// Collapse common single-line terminal redraw controls before filters parse output.
+fn collapse_terminal_control(text: &str) -> String {
+    let mut visible = String::new();
+    let mut line: Vec<char> = Vec::new();
+    let mut cursor = 0usize;
+    let mut chars = text.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        match ch {
+            '\r' if chars.peek() == Some(&'\n') => {
+                chars.next();
+                visible.extend(line.drain(..));
+                visible.push('\n');
+                cursor = 0;
+            }
+            '\r' => {
+                cursor = 0;
+            }
+            '\n' => {
+                visible.extend(line.drain(..));
+                visible.push('\n');
+                cursor = 0;
+            }
+            '\u{8}' => {
+                cursor = cursor.saturating_sub(1);
+            }
+            ch => {
+                if cursor < line.len() {
+                    line[cursor] = ch;
+                } else {
+                    line.push(ch);
+                }
+                cursor += 1;
+            }
+        }
+    }
+
+    visible.extend(line);
+    visible
+}
+
 // ISSUE #897: ChildGuard RAII prevents zombie processes that caused kernel panic
 pub const RAW_CAP: usize = 10_485_760; // 10 MiB
 
@@ -542,6 +583,7 @@ pub fn run_streaming(
                     StreamLine::Stderr(l) => (l, true),
                     StreamLine::Stdout(l) => (l, false),
                 };
+                let line = collapse_terminal_control(&line);
                 if is_stderr {
                     if !capped_err {
                         if raw_stderr.len() + line.len() < RAW_CAP {
@@ -623,6 +665,7 @@ pub fn run_streaming(
                             );
                         }
                     }
+                    raw_stdout = collapse_terminal_control(&raw_stdout);
                     filtered = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                         filter_fn(&raw_stdout)
                     }))
@@ -648,15 +691,16 @@ pub fn run_streaming(
                             );
                         }
                     }
+                    raw_stdout = collapse_terminal_control(&raw_stdout);
                     filtered = raw_stdout.clone();
                 }
             }
         }
 
-        raw_stderr = stderr_thread.join().unwrap_or_else(|e| {
+        raw_stderr = collapse_terminal_control(&stderr_thread.join().unwrap_or_else(|e| {
             eprintln!("[rtk] warning: stderr reader thread panicked: {:?}", e);
             String::new()
-        });
+        }));
     }
     if let Some(t) = stdin_thread {
         t.join().ok();
@@ -779,8 +823,8 @@ fn show_usage_if_asked(cmd: &mut Command) -> Result<()> {
 fn capture(cmd: &mut Command) -> Result<CaptureResult> {
     let raw = capture_raw(cmd)?;
     Ok(CaptureResult {
-        stdout: super::utils::decode_process_output(&raw.stdout),
-        stderr: super::utils::decode_process_output(&raw.stderr),
+        stdout: collapse_terminal_control(&super::utils::decode_process_output(&raw.stdout)),
+        stderr: collapse_terminal_control(&super::utils::decode_process_output(&raw.stderr)),
         exit_code: raw.exit_code,
     })
 }
@@ -1166,6 +1210,16 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn test_run_streaming_capture_only_collapses_carriage_return_progress() {
+        // nosemgrep: interpreter-execution
+        let mut cmd = Command::new("sh");
+        cmd.args(["-c", "printf 'step 1\\rstep 2\\n'"]);
+        let result = run_streaming(&mut cmd, StdinMode::Null, FilterMode::CaptureOnly).unwrap();
+        assert_eq!(result.raw_stdout, "step 2\n");
+        assert_eq!(result.filtered, "step 2\n");
+    }
+
+    #[test]
     fn test_exec_capture_success() {
         let mut cmd = Command::new("echo");
         cmd.arg("hello_capture");
@@ -1201,6 +1255,24 @@ pub(crate) mod tests {
         let combined = result.combined();
         assert!(combined.contains("out_msg"));
         assert!(combined.contains("err_msg"));
+    }
+
+    #[test]
+    fn test_exec_capture_collapses_carriage_return_progress() {
+        // nosemgrep: interpreter-execution
+        let mut cmd = Command::new("sh");
+        cmd.args(["-c", "printf 'Downloading... 0%%\\rDownloading... 3%%\\n'"]);
+        let result = exec_capture(&mut cmd).unwrap();
+        assert_eq!(result.stdout, "Downloading... 3%\n");
+    }
+
+    #[test]
+    fn test_exec_capture_applies_backspace_overwrites() {
+        // nosemgrep: interpreter-execution
+        let mut cmd = Command::new("sh");
+        cmd.args(["-c", "printf 'abc\\bD\\n'"]);
+        let result = exec_capture(&mut cmd).unwrap();
+        assert_eq!(result.stdout, "abD\n");
     }
 
     #[test]
