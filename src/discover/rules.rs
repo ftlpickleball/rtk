@@ -507,6 +507,15 @@ pub const RULES: &[RtkRule] = &[
         subcmd_status: &[],
     },
     RtkRule {
+        pattern: r"^bazel\s+(build|test|run|query)\b",
+        rtk_cmd: "rtk bazel",
+        rewrite_prefixes: &["bazel"],
+        category: "Build",
+        savings_pct: 72.0,
+        subcmd_savings: &[],
+        subcmd_status: &[],
+    },
+    RtkRule {
         pattern: r"^bundle\s+(install|update)\b",
         rtk_cmd: "rtk bundle",
         rewrite_prefixes: &["bundle"],
