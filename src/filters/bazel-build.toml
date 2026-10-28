@@ -1,0 +1,49 @@
+[filters.bazel-build]
+description = "Strip bazel build action progress and loading noise"
+match_command = "^bazel\\s+(build|run)\\b"
+strip_ansi = true
+# bazel emits progress/INFO/action lines on stderr, so filter the merged stream.
+filter_stderr = true
+strip_lines_matching = [
+  "^\\s*$",
+  "^Computing main repo mapping:",
+  "^INFO: Invocation ID:",
+  "^Loading:",
+  "^Analyzing:",
+  "^\\[\\d+",
+  "^INFO: Analyzed",
+  "^INFO: Found \\d+ target",
+  "^INFO: From ",
+  "^INFO: Elapsed time:",
+  "^INFO: \\d+ process",
+]
+truncate_lines_at = 120
+max_lines = 40
+
+[[tests.bazel-build]]
+name = "strips progress and action noise"
+input = """
+Loading: 0 packages loaded
+Analyzing: target //src:main (3 packages loaded, 12 targets configured)
+INFO: Analyzed target //src:main (3 packages loaded, 12 targets configured).
+INFO: Found 1 target...
+[3 / 7] Compiling src/main.cc
+[5 / 7] Linking src/main
+INFO: Elapsed time: 4.234s, Critical Path: 2.31s
+INFO: 7 processes: 3 internal, 4 darwin-sandbox.
+INFO: Build completed successfully, 7 total actions
+Target //src:main up-to-date:
+  bazel-bin/src/main
+"""
+expected = "INFO: Build completed successfully, 7 total actions\nTarget //src:main up-to-date:\n  bazel-bin/src/main"
+
+[[tests.bazel-build]]
+name = "keeps compiler warnings and errors"
+input = """
+INFO: Analyzed target //src:main (0 packages loaded, 0 targets configured).
+[1 / 3] Compiling src/main.cc
+src/main.cc:4:7: warning: unused variable 'x' [-Wunused-variable]
+ERROR: /repo/src/BUILD.bazel:1:10: Compiling src/main.cc failed: (Exit 1)
+FAILED: Build did NOT complete successfully
+"""
+expected = "src/main.cc:4:7: warning: unused variable 'x' [-Wunused-variable]\nERROR: /repo/src/BUILD.bazel:1:10: Compiling src/main.cc failed: (Exit 1)\nFAILED: Build did NOT complete successfully"

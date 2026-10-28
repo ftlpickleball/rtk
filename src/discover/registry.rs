@@ -6622,6 +6622,28 @@ mod tests {
         );
     }
 
+    // --- Bazel ---
+
+    #[test]
+    fn test_rewrite_bazel_subcommands() {
+        for sub in ["build", "test", "run", "query"] {
+            assert_eq!(
+                rewrite_command_no_prefixes(&format!("bazel {sub} //..."), &[]),
+                Some(format!("rtk bazel {sub} //...")),
+            );
+        }
+    }
+
+    #[test]
+    fn test_rewrite_bazel_skips_other_subcommands_and_pipelines() {
+        assert_eq!(rewrite_command_no_prefixes("bazel info", &[]), None);
+        assert_eq!(rewrite_command_no_prefixes("bazel testing", &[]), None);
+        assert_ne!(
+            rewrite_command_no_prefixes("bazel query //... | wc -l", &[]),
+            Some("rtk bazel query //... | wc -l".into())
+        );
+    }
+
     // --- Maven ---
 
     #[test]

@@ -590,6 +590,14 @@ pub const RULES: &[RtkRule] = &[
         ..RtkRule::DEFAULT
     },
     RtkRule {
+        pattern: r"^bazel\s+(build|test|run|query)\b",
+        rtk_cmd: "rtk bazel",
+        rewrite_prefixes: &["bazel"],
+        category: "Build",
+        savings_pct: 72.0,
+        ..RtkRule::DEFAULT
+    },
+    RtkRule {
         pattern: r"^bundle\s+(install|update)\b",
         rtk_cmd: "rtk bundle",
         pipeline_safety: PipelineSafety::ProducerOnly,
