@@ -5,10 +5,12 @@
 //! not in any format rtk recognises, so what reaches the user is decided by the generic
 //! fallback alone. These run the binary against small scripts standing in for that runner.
 
+mod common;
+
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::Output;
 
 /// Writes an executable `name` in `dir` that runs `body`.
 fn write_script(dir: &Path, name: &str, body: &str) {
@@ -20,11 +22,9 @@ fn write_script(dir: &Path, name: &str, body: &str) {
 /// `rtk test ./<name>` run from `dir`, with rtk's recovery hints off so the output is
 /// exactly what the fallback chose.
 fn rtk_test(dir: &Path, name: &str) -> Output {
-    fs::create_dir_all(dir.join("home")).expect("create home");
-    Command::new(env!("CARGO_BIN_EXE_rtk"))
+    common::rtk_command()
         .args(["test", &format!("./{name}")])
         .current_dir(dir)
-        .env("HOME", dir.join("home"))
         .env("RTK_RECALL", "0")
         .output()
         .expect("run rtk")
