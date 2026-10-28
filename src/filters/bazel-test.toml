@@ -1,0 +1,62 @@
+[filters.bazel-test]
+description = "Compact bazel test output — strip passing, keep failures"
+match_command = "^bazel\\s+test\\b"
+strip_ansi = true
+# bazel emits progress/INFO/PASSED lines on stderr, so filter the merged stream.
+filter_stderr = true
+strip_lines_matching = [
+  "^\\s*$",
+  "^Computing main repo mapping:",
+  "^INFO: Invocation ID:",
+  "^Loading:",
+  "^Analyzing:",
+  "^\\[\\d+",
+  "^INFO: Analyzed",
+  "^INFO: Found \\d+ target",
+  "^INFO: Found \\d+ test target",
+  "^INFO: Elapsed time:",
+  "^INFO: \\d+ process",
+  "^INFO: From ",
+  "^//.*PASSED in",
+]
+truncate_lines_at = 120
+max_lines = 50
+
+[[tests.bazel-test]]
+name = "strips passing tests keeps failures"
+input = """
+INFO: Analyzed 5 test targets (0 packages loaded, 0 targets configured).
+INFO: Found 5 test targets...
+[2 / 5] Testing //tests:unit_test
+//tests:unit_test PASSED in 0.3s
+//tests:integration_test FAILED in 2.1s
+  /tmp/.../test.log
+  FAILED: exit code 1
+INFO: Elapsed time: 5.123s
+INFO: 5 processes: 2 internal, 3 darwin-sandbox.
+//tests:integration_test FAILED
+"""
+expected = "//tests:integration_test FAILED in 2.1s\n  /tmp/.../test.log\n  FAILED: exit code 1\n//tests:integration_test FAILED"
+
+[[tests.bazel-test]]
+name = "strips combined target summary and repo mapping noise"
+input = """
+Computing main repo mapping:
+INFO: Found 37 targets and 39 test targets...
+//lib/foo:bar_test FAILED in 1.2s
+Executed 39 out of 39 tests: 38 tests pass and 1 fails.
+"""
+expected = """
+//lib/foo:bar_test FAILED in 1.2s
+Executed 39 out of 39 tests: 38 tests pass and 1 fails.
+"""
+
+[[tests.bazel-test]]
+name = "strips cached and fresh passes, keeps the all-pass summary"
+input = """
+INFO: Analyzed 2 test targets (0 packages loaded, 0 targets configured).
+//proto:a_test                                                  (cached) PASSED in 0.4s
+//proto:b_test                                                           PASSED in 0.2s
+Executed 1 out of 2 tests: 2 tests pass.
+"""
+expected = "Executed 1 out of 2 tests: 2 tests pass."

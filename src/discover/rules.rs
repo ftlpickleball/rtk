@@ -595,8 +595,7 @@ pub const RULES: &[RtkRule] = &[
         rewrite_prefixes: &["bazel"],
         category: "Build",
         savings_pct: 72.0,
-        subcmd_savings: &[],
-        subcmd_status: &[],
+        ..RtkRule::DEFAULT
     },
     RtkRule {
         pattern: r"^bundle\s+(install|update)\b",

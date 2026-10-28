@@ -1,0 +1,23 @@
+[filters.bazel-query]
+description = "Compact bazel query output"
+match_command = "^bazel\\s+query\\b"
+strip_ansi = true
+# query results are on stdout; the "Loading:" progress noise is on stderr.
+filter_stderr = true
+# No max_lines: the result set is the answer, so never truncate it.
+strip_lines_matching = [
+  "^\\s*$",
+  "^Computing main repo mapping:",
+  "^INFO: Invocation ID:",
+  "^Loading:",
+]
+
+[[tests.bazel-query]]
+name = "strips loading noise"
+input = """
+Loading: 0 packages loaded
+//src:main
+//src:lib
+//tests:unit_test
+"""
+expected = "//src:main\n//src:lib\n//tests:unit_test"
