@@ -1,6 +1,6 @@
 [filters.bazel-query]
-description = "Compact bazel query output"
-match_command = "^bazel\\s+query\\b"
+description = "Compact bazel query/cquery/aquery output"
+match_command = "^bazel\\s+(query|cquery|aquery)\\b"
 strip_ansi = true
 # query results are on stdout; the "Loading:" progress noise is on stderr.
 filter_stderr = true
@@ -10,6 +10,15 @@ strip_lines_matching = [
   "^Computing main repo mapping:",
   "^INFO: Invocation ID:",
   "^Loading:",
+  "^Analyzing:",
+  "^INFO: Analyzed",
+  "^INFO: Found \\d+ target",
+  "^INFO: Elapsed time:",
+  # cquery/aquery run analysis; a successful one adds these. Failures say ERROR/FAILED, kept.
+  "^INFO: \\d+ process",
+  "^INFO: Build completed successfully",
+  "^DEBUG: \\S*/external/aspect_tools_telemetry",
+  "^See https://github\\.com/aspect-build/tools_telemetry",
 ]
 
 [[tests.bazel-query]]
@@ -21,3 +30,58 @@ Loading: 0 packages loaded
 //tests:unit_test
 """
 expected = "//src:main\n//src:lib\n//tests:unit_test"
+
+[[tests.bazel-query]]
+name = "cquery strips analysis noise, keeps configured targets"
+input = """
+Loading: 0 packages loaded
+Analyzing: 2 targets (0 packages loaded, 0 targets configured)
+INFO: Analyzed 2 targets (0 packages loaded, 0 targets configured).
+INFO: Found 2 targets...
+//src:main (8a3c1b2)
+//src:lib (8a3c1b2)
+INFO: Elapsed time: 0.211s
+"""
+expected = "//src:main (8a3c1b2)\n//src:lib (8a3c1b2)"
+
+[[tests.bazel-query]]
+name = "real ftlp-source query: loading noise stripped, all targets kept"
+input = """
+Loading: 0 packages loaded
+//proto:ftlp_pb2_py
+//proto:session_bundle_pb2_py
+//proto/v1.0.0:ftlp_pb2_py
+//proto/v1.0.0:ftlp_pb_swift_drift_test
+//proto/v1.0.0:ftlp_proto
+"""
+expected = "//proto:ftlp_pb2_py\n//proto:session_bundle_pb2_py\n//proto/v1.0.0:ftlp_pb2_py\n//proto/v1.0.0:ftlp_pb_swift_drift_test\n//proto/v1.0.0:ftlp_proto"
+
+[[tests.bazel-query]]
+name = "real ftlp-source cquery: analysis and success trailer stripped"
+input = """
+INFO: Invocation ID: 554e7dcb-63b2-46e7-8975-b809cef7dbb2
+Computing main repo mapping:
+Loading:
+Loading: 0 packages loaded
+Analyzing: 16 targets (0 packages loaded, 0 targets configured)
+INFO: Analyzed 16 targets (0 packages loaded, 0 targets configured).
+INFO: Found 16 targets...
+//proto/v1.0.0:ftlp_pb2_py (44ff569)
+//proto/v1.0.0:protoc_bin (5e1c524)
+//proto/v1.0.0:protoc_bin (797d296)
+//proto:ftlp_pb2_py (5e1c524)
+INFO: Elapsed time: 0.462s, Critical Path: 0.00s
+INFO: 0 processes.
+INFO: Build completed successfully, 0 total actions
+"""
+expected = "//proto/v1.0.0:ftlp_pb2_py (44ff569)\n//proto/v1.0.0:protoc_bin (5e1c524)\n//proto/v1.0.0:protoc_bin (797d296)\n//proto:ftlp_pb2_py (5e1c524)"
+
+[[tests.bazel-query]]
+name = "cquery analysis failure kept"
+input = """
+Analyzing: 1 target (0 packages loaded, 0 targets configured)
+ERROR: /repo/pkg/BUILD.bazel:3:11: no such target '//pkg:missing'
+INFO: Elapsed time: 0.120s
+ERROR: Build did NOT complete successfully
+"""
+expected = "ERROR: /repo/pkg/BUILD.bazel:3:11: no such target '//pkg:missing'\nERROR: Build did NOT complete successfully"

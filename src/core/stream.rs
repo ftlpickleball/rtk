@@ -906,6 +906,23 @@ fn capture_raw(cmd: &mut Command) -> Result<CaptureBytes> {
     })
 }
 
+/// Run `cmd` with stdout and stderr on one pipe so the bytes keep the child's write order.
+/// The merged stream is returned as `stdout`; `stderr` is always empty.
+pub fn output_interleaved(cmd: &mut Command) -> io::Result<std::process::Output> {
+    let (mut reader, writer) = io::pipe()?;
+    cmd.stdout(writer.try_clone()?).stderr(writer);
+    let mut child = cmd.spawn()?;
+    // `cmd` still owns the parent's write ends; replace them or the read never hits EOF.
+    cmd.stdout(Stdio::null()).stderr(Stdio::null());
+    let mut merged = Vec::new();
+    reader.read_to_end(&mut merged)?;
+    Ok(std::process::Output {
+        status: child.wait()?,
+        stdout: merged,
+        stderr: Vec::new(),
+    })
+}
+
 /// Raw-byte capture result, for callers that must control decoding themselves —
 /// e.g. non-UTF-8 output that [`exec_capture`]'s `from_utf8_lossy` would corrupt.
 pub struct CaptureBytes {
@@ -1333,6 +1350,17 @@ pub(crate) mod tests {
         cmd.args(["-c", "printf 'a 0%%\\ra 9%%\\n'"]);
         let result = exec_capture_stdin_with_relay(&mut cmd).unwrap();
         assert_eq!(result.stdout, "a 0%\ra 9%\n");
+    }
+
+    #[test]
+    fn test_output_interleaved_keeps_write_order_across_streams() {
+        // nosemgrep: interpreter-execution
+        let mut cmd = Command::new("sh");
+        cmd.args(["-c", "echo out1; echo err1 >&2; echo out2; exit 3"]);
+        let out = output_interleaved(&mut cmd).unwrap();
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "out1\nerr1\nout2\n");
+        assert!(out.stderr.is_empty());
+        assert_eq!(out.status.code(), Some(3));
     }
 
     #[test]

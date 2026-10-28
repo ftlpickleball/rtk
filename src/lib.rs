@@ -1996,13 +1996,13 @@ fn run_fallback(parse_error: clap::Error) -> Result<i32> {
     if let Some(filter) = toml_match {
         // TOML match: capture stdout for filtering
         let result = if filter.filter_stderr {
-            // Merge stderr into stdout so the filter can strip banners emitted by tools like liquibase
-            core::utils::resolved_command(&args[0])
-                .child_args(&args[1..])
-                .stdin(std::process::Stdio::inherit())
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped()) // captured for merging
-                .output()
+            // Merge stderr into stdout so the filter can strip banners emitted by tools like
+            // liquibase; one shared pipe keeps lines in the order the tool wrote them.
+            core::stream::output_interleaved(
+                core::utils::resolved_command(&args[0])
+                    .child_args(&args[1..])
+                    .stdin(std::process::Stdio::inherit()),
+            )
         } else {
             core::utils::resolved_command(&args[0])
                 .child_args(&args[1..])

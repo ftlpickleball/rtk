@@ -2185,6 +2185,18 @@ match_command = "^make\\b"
         }
     }
 
+    #[test]
+    fn test_builtin_bazel_subcommands_route_to_their_filter() {
+        let filters = make_filters(BUILTIN_TOML);
+        let name_for = |cmd: &str| find_filter_in(cmd, &filters).map(|f| f.name.clone());
+        assert_eq!(name_for("bazel build //..."), Some("bazel-build".into()));
+        assert_eq!(name_for("bazel test //..."), Some("bazel-test".into()));
+        assert_eq!(name_for("bazel coverage //..."), Some("bazel-test".into()));
+        assert_eq!(name_for("bazel cquery //..."), Some("bazel-query".into()));
+        assert_eq!(name_for("bazel aquery //..."), Some("bazel-query".into()));
+        assert_eq!(name_for("bazel run //:server"), None);
+    }
+
     /// Verify the exact count of built-in filters.
     /// Fails if a file is added/removed without updating this test.
     #[test]

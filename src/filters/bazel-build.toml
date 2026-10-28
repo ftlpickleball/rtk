@@ -1,24 +1,26 @@
 [filters.bazel-build]
 description = "Strip bazel build action progress and loading noise"
-match_command = "^bazel\\s+(build|run)\\b"
+# Not `run`: the target's own output would be buffered until exit and filtered as bazel's.
+match_command = "^bazel\\s+build\\b"
 strip_ansi = true
 # bazel emits progress/INFO/action lines on stderr, so filter the merged stream.
 filter_stderr = true
+# No max_lines/truncate_lines_at: errors and warnings are the payload; never cut them.
 strip_lines_matching = [
   "^\\s*$",
   "^Computing main repo mapping:",
   "^INFO: Invocation ID:",
   "^Loading:",
   "^Analyzing:",
-  "^\\[\\d+",
+  "^\\[[\\d,]+ / [\\d,]+\\]",
   "^INFO: Analyzed",
   "^INFO: Found \\d+ target",
   "^INFO: From ",
   "^INFO: Elapsed time:",
   "^INFO: \\d+ process",
+  "^DEBUG: \\S*/external/aspect_tools_telemetry",
+  "^See https://github\\.com/aspect-build/tools_telemetry",
 ]
-truncate_lines_at = 120
-max_lines = 40
 
 [[tests.bazel-build]]
 name = "strips progress and action noise"
@@ -28,7 +30,7 @@ Analyzing: target //src:main (3 packages loaded, 12 targets configured)
 INFO: Analyzed target //src:main (3 packages loaded, 12 targets configured).
 INFO: Found 1 target...
 [3 / 7] Compiling src/main.cc
-[5 / 7] Linking src/main
+[1,205 / 2,310] Linking src/main
 INFO: Elapsed time: 4.234s, Critical Path: 2.31s
 INFO: 7 processes: 3 internal, 4 darwin-sandbox.
 INFO: Build completed successfully, 7 total actions
@@ -36,6 +38,33 @@ Target //src:main up-to-date:
   bazel-bin/src/main
 """
 expected = "INFO: Build completed successfully, 7 total actions\nTarget //src:main up-to-date:\n  bazel-bin/src/main"
+
+[[tests.bazel-build]]
+name = "real ftlp-source build: idle progress line stripped"
+input = """
+INFO: Invocation ID: 6d26a1a2-a663-4fe7-a481-4e6bf139e6ad
+Computing main repo mapping:
+Loading:
+Loading: 0 packages loaded
+Analyzing: 16 targets (0 packages loaded, 0 targets configured)
+Analyzing: 16 targets (0 packages loaded, 0 targets configured)
+[0 / 0] no actions running
+INFO: Analyzed 16 targets (0 packages loaded, 0 targets configured).
+INFO: Found 16 targets...
+INFO: Elapsed time: 1.124s, Critical Path: 0.19s
+INFO: 1 process: 1 internal.
+INFO: Build completed successfully, 1 total action
+"""
+expected = "INFO: Build completed successfully, 1 total action"
+
+[[tests.bazel-build]]
+name = "keeps bracketed non-progress lines"
+input = """
+[1 / 3] Compiling src/main.cc
+[ RUN      ] FooTest.Bar
+[1] stray tool output
+"""
+expected = "[ RUN      ] FooTest.Bar\n[1] stray tool output"
 
 [[tests.bazel-build]]
 name = "keeps compiler warnings and errors"
@@ -47,3 +76,63 @@ ERROR: /repo/src/BUILD.bazel:1:10: Compiling src/main.cc failed: (Exit 1)
 FAILED: Build did NOT complete successfully
 """
 expected = "src/main.cc:4:7: warning: unused variable 'x' [-Wunused-variable]\nERROR: /repo/src/BUILD.bazel:1:10: Compiling src/main.cc failed: (Exit 1)\nFAILED: Build did NOT complete successfully"
+
+[[tests.bazel-build]]
+name = "strips aspect telemetry notice, keeps other DEBUG lines"
+input = """
+DEBUG: /Users/u/Library/Caches/bazel/_bazel_u/abc/external/aspect_tools_telemetry+/extension.bzl:171:14: Aspect Telemetry is uploading ruleset usage data now.
+
+See https://github.com/aspect-build/tools_telemetry for the exact fields and opt-out instructions.
+DEBUG: /repo/defs.bzl:3:6: my print
+INFO: Build completed successfully, 1 total action
+"""
+expected = "DEBUG: /repo/defs.bzl:3:6: my print\nINFO: Build completed successfully, 1 total action"
+
+[[tests.bazel-build]]
+name = "keeps long error lines and long error output whole"
+input = """
+ERROR: /very/long/path/to/a/package/that/goes/on/and/on/BUILD.bazel:12:34: in deps attribute of cc_library rule //pkg:lib: target '//other:dep' is not visible from target '//pkg:lib'
+e01
+e02
+e03
+e04
+e05
+e06
+e07
+e08
+e09
+e10
+e11
+e12
+e13
+e14
+e15
+e16
+e17
+e18
+e19
+e20
+e21
+e22
+e23
+e24
+e25
+e26
+e27
+e28
+e29
+e30
+e31
+e32
+e33
+e34
+e35
+e36
+e37
+e38
+e39
+e40
+e41
+FAILED: Build did NOT complete successfully
+"""
+expected = "ERROR: /very/long/path/to/a/package/that/goes/on/and/on/BUILD.bazel:12:34: in deps attribute of cc_library rule //pkg:lib: target '//other:dep' is not visible from target '//pkg:lib'\ne01\ne02\ne03\ne04\ne05\ne06\ne07\ne08\ne09\ne10\ne11\ne12\ne13\ne14\ne15\ne16\ne17\ne18\ne19\ne20\ne21\ne22\ne23\ne24\ne25\ne26\ne27\ne28\ne29\ne30\ne31\ne32\ne33\ne34\ne35\ne36\ne37\ne38\ne39\ne40\ne41\nFAILED: Build did NOT complete successfully"
