@@ -1309,6 +1309,30 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn test_collapse_terminal_control_crlf_is_newline_not_redraw() {
+        assert_eq!(collapse_terminal_control("line 1\r\nline 2\r\n"), "line 1\nline 2\n");
+    }
+
+    #[test]
+    fn test_exec_capture_collapses_stderr_independently() {
+        // nosemgrep: interpreter-execution
+        let mut cmd = Command::new("sh");
+        cmd.args(["-c", "printf 'out\\n'; printf 'a 0%%\\ra 9%%\\n' >&2"]);
+        let result = exec_capture(&mut cmd).unwrap();
+        assert_eq!(result.stdout, "out\n");
+        assert_eq!(result.stderr, "a 9%\n");
+    }
+
+    #[test]
+    fn test_exec_capture_stdin_with_relay_stays_verbatim() {
+        // nosemgrep: interpreter-execution
+        let mut cmd = Command::new("sh");
+        cmd.args(["-c", "printf 'a 0%%\\ra 9%%\\n'"]);
+        let result = exec_capture_stdin_with_relay(&mut cmd).unwrap();
+        assert_eq!(result.stdout, "a 0%\ra 9%\n");
+    }
+
+    #[test]
     fn test_exec_capture_success() {
         let mut cmd = Command::new("echo");
         cmd.arg("hello_capture");
