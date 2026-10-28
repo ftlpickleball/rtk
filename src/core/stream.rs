@@ -1310,7 +1310,10 @@ pub(crate) mod tests {
 
     #[test]
     fn test_collapse_terminal_control_crlf_is_newline_not_redraw() {
-        assert_eq!(collapse_terminal_control("line 1\r\nline 2\r\n"), "line 1\nline 2\n");
+        assert_eq!(
+            collapse_terminal_control("line 1\r\nline 2\r\n"),
+            "line 1\nline 2\n"
+        );
     }
 
     #[test]
