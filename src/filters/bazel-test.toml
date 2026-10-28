@@ -1,16 +1,17 @@
 [filters.bazel-test]
-description = "Compact bazel test output — strip passing, keep failures"
-match_command = "^bazel\\s+test\\b"
+description = "Compact bazel test/coverage output — strip passing, keep failures"
+match_command = "^bazel\\s+(test|coverage)\\b"
 strip_ansi = true
 # bazel emits progress/INFO/PASSED lines on stderr, so filter the merged stream.
 filter_stderr = true
+# No max_lines/truncate_lines_at: failing targets and errors are the payload; never cut them.
 strip_lines_matching = [
   "^\\s*$",
   "^Computing main repo mapping:",
   "^INFO: Invocation ID:",
   "^Loading:",
   "^Analyzing:",
-  "^\\[\\d+",
+  "^\\[[\\d,]+ / [\\d,]+\\]",
   "^INFO: Analyzed",
   "^INFO: Found \\d+ target",
   "^INFO: Found \\d+ test target",
@@ -18,9 +19,9 @@ strip_lines_matching = [
   "^INFO: \\d+ process",
   "^INFO: From ",
   "^//.*PASSED in",
+  "^DEBUG: \\S*/external/aspect_tools_telemetry",
+  "^See https://github\\.com/aspect-build/tools_telemetry",
 ]
-truncate_lines_at = 120
-max_lines = 50
 
 [[tests.bazel-test]]
 name = "strips passing tests keeps failures"
@@ -60,3 +61,52 @@ INFO: Analyzed 2 test targets (0 packages loaded, 0 targets configured).
 Executed 1 out of 2 tests: 2 tests pass.
 """
 expected = "Executed 1 out of 2 tests: 2 tests pass."
+
+[[tests.bazel-test]]
+name = "real ftlp-source run: telemetry and progress stripped, interleaved order kept"
+input = """
+INFO: Invocation ID: 9a88c277-4aee-4891-97cd-34ff1bb0a597
+Computing main repo mapping:
+Loading: 0 packages loaded
+Analyzing: 16 targets (2 packages loaded, 0 targets configured)
+
+DEBUG: /Users/clove/Library/Caches/bazel/_bazel_clove/bd61/external/aspect_tools_telemetry+/extension.bzl:171:14: Aspect Telemetry is uploading ruleset usage data now.
+
+See https://github.com/aspect-build/tools_telemetry for the exact fields and opt-out instructions.
+INFO: Analyzed 16 targets (3 packages loaded, 26 targets configured).
+INFO: Found 11 targets and 5 test targets...
+INFO: Elapsed time: 8.439s, Critical Path: 0.62s
+INFO: 1 process: 56 action cache hit, 1 internal.
+INFO: Build completed successfully, 1 total action
+Executed 0 out of 5 tests: 5 tests pass.
+"""
+expected = "INFO: Build completed successfully, 1 total action\nExecuted 0 out of 5 tests: 5 tests pass."
+
+[[tests.bazel-test]]
+name = "real ftlp-source //proto/... cached run: summary in write order"
+input = """
+INFO: Invocation ID: c213a0d1-356f-40ba-b712-d8b1565ed2ae
+Computing main repo mapping:
+Loading:
+Loading: 0 packages loaded
+Analyzing: 16 targets (0 packages loaded, 0 targets configured)
+Analyzing: 16 targets (0 packages loaded, 0 targets configured)
+[0 / 1] checking cached actions
+INFO: Analyzed 16 targets (0 packages loaded, 0 targets configured).
+INFO: Found 11 targets and 5 test targets...
+INFO: Elapsed time: 0.738s, Critical Path: 0.27s
+INFO: 3 processes: 3 action cache hit, 4 disk cache hit, 1 internal.
+INFO: Build completed successfully, 3 total actions
+
+Executed 0 out of 5 tests: 5 tests pass.
+"""
+expected = "INFO: Build completed successfully, 3 total actions\nExecuted 0 out of 5 tests: 5 tests pass."
+
+[[tests.bazel-test]]
+name = "coverage output strips like test"
+input = """
+[4 / 9] Testing //pkg:a_test
+//pkg:a_test PASSED in 0.5s
+//pkg:b_test FAILED in 0.7s
+"""
+expected = "//pkg:b_test FAILED in 0.7s"

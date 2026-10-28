@@ -590,7 +590,7 @@ pub const RULES: &[RtkRule] = &[
         ..RtkRule::DEFAULT
     },
     RtkRule {
-        pattern: r"^bazel\s+(build|test|run|query)\b",
+        pattern: r"^bazel\s+(build|test|coverage|query|cquery|aquery)\b",
         rtk_cmd: "rtk bazel",
         rewrite_prefixes: &["bazel"],
         category: "Build",
